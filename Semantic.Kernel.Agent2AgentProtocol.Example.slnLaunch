@@ -1,0 +1,23 @@
+[
+  {
+    "Name": "SwaggerRun",
+    "Projects": [
+      {
+        "Path": "Agent2AgentProtocol.Discovery.Service\\Agent2AgentProtocol.Discovery.Service.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "Semantic.Kernel.Agent2AgentProtocol.Example.Agent2\\Semantic.Kernel.Agent2AgentProtocol.ReverseAgent.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "Semantic.Kernel.Agent2AgentProtocol.Example.Agent3\\Semantic.Kernel.Agent2AgentProtocol.UpperCaseAgent.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "Semantic.Kernel.Agent2AgentProtocol.Example.Agent1\\Semantic.Kernel.Agent2AgentProtocol.Client.csproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]

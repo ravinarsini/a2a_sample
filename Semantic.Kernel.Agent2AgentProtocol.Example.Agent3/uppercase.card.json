@@ -1,0 +1,19 @@
+{
+    "agentId": "Agent3",
+    "name": "uppercase",
+    "skill": "uppercase",
+    "Address": "a2a-uppercase",
+    "Endpoint": "http://localhost:5000/resolve/uppercase",
+    "capabilities": [
+        {
+            "name": "uppercase",
+            "description": "Converts the input string to uppercase.",
+            "input": {
+                "text": "string"
+            },
+            "output": {
+                "outputText": "string"
+            }
+        }
+    ]
+}

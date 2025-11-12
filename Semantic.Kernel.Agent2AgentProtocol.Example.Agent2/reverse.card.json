@@ -1,0 +1,19 @@
+{
+    "agentId": "Agent2",
+    "name": "reverse",
+    "skill": "reverse",
+    "Address": "a2a-reverse",
+    "Endpoint": "http://localhost:5000/resolve/reverse",
+    "capabilities": [
+        {
+            "name": "reverse",
+            "description": "Reverses the input string.",
+            "input": {
+                "text": "string"
+            },
+            "output": {
+                "outputText": "string"
+            }
+        }
+    ]
+}
