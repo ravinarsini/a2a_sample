@@ -1,0 +1,19 @@
+{
+    "agentId": "Agent4",
+    "name": "news",
+    "skill": "news",
+    "Address": "a2a-news",
+    "Endpoint": "http://localhost:5000/resolve/news",
+    "capabilities": [
+        {
+            "name": "news",
+            "description": "Searches for news using ChatGPT and creates a file with results.",
+            "input": {
+                "text": "string"
+            },
+            "output": {
+                "outputText": "string"
+            }
+        }
+    ]
+}

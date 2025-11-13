@@ -9,6 +9,7 @@ using A2A;
 using Agent2AgentProtocol.Discovery.Service;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.SemanticKernel;
 using Semantic.Kernel.Agent2AgentProtocol.Example.Core.A2A;
 using Semantic.Kernel.Agent2AgentProtocol.Example.Core.Messaging;
 using Semantic.Kernel.Agent2AgentProtocol.Example.Core.SemanticKernel;
@@ -24,10 +25,17 @@ public class Agent3(
     private readonly IMessagingTransport _transport = transport;
     private readonly TransportOptions _options = options.Value;
     private readonly ILogger<Agent3> _logger = logger;
+    private AgentRouter? _router;
 
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("[Agent-3] waiting for task...");
+
+        // Import the TextProcessing plugin
+        kernel.ImportPluginFromType<TextProcessingPlugin>("TextProcessing");
+
+        // Initialize router after plugin is imported
+        _router = new AgentRouter(kernel);
 
         // Register capabilities with discovery service
         using var client = new HttpClient();
@@ -60,19 +68,17 @@ public class Agent3(
             _logger.LogInformation("[Agent-3] received: '{Text}' from {From}", text, from);
 
             string result;
-
-            if(text.StartsWith("uppercase:", StringComparison.OrdinalIgnoreCase))
+            try
             {
-                string input = text["uppercase:".Length..].Trim();
-
-                Microsoft.SemanticKernel.KernelFunction func = TextProcessingFunction.GetFunctionByType("UPPER");
-                result = (await kernel.InvokeAsync(func, new() { ["input"] = input })).ToString();
+                // Use AgentRouter for intelligent routing
+                FunctionResult functionResult = await _router!.RouteAndExecuteAsync(text);
+                result = functionResult.ToString();
+                _logger.LogInformation("[Agent-3] Successfully processed request using router");
             }
-            else
+            catch (Exception ex)
             {
-                result = text.StartsWith("upper:", StringComparison.OrdinalIgnoreCase)
-                    ? text["upper:".Length..].Trim().ToUpperInvariant()
-                    : $"[unhandled] {text}";
+                _logger.LogError(ex, "[Agent-3] Error processing request with router");
+                result = $"[error] {ex.Message}";
             }
 
             _logger.LogInformation("[Agent-3] → responding with '{Result}'", result);
