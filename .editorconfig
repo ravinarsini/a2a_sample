@@ -50,9 +50,13 @@ dotnet_style_null_propagation = true:suggestion
 ## C# code style settings
 
 #Implicit and explicit types
-csharp_style_var_for_built_in_types = false:error
-csharp_style_var_when_type_is_apparent = true:suggestion
-csharp_style_var_elsewhere = false:error
+# Allow var usage everywhere - no warnings
+csharp_style_var_for_built_in_types = true:none
+csharp_style_var_when_type_is_apparent = true:none
+csharp_style_var_elsewhere = true:none
+
+# Explicitly disable IDE0008
+dotnet_diagnostic.IDE0008.severity = none
 
 # Expression-bodied members
 csharp_style_expression_bodied_methods = true:suggestion
