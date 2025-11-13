@@ -1,5 +1,6 @@
 using Microsoft.SemanticKernel;
 using System.ComponentModel;
+using System.Text.RegularExpressions;
 
 namespace Semantic.Kernel.Agent2AgentProtocol.Example.Core.SemanticKernel;
 
@@ -23,7 +24,7 @@ public class AgentRouter
     /// <returns>The result of the function execution</returns>
     public async Task<FunctionResult> RouteAndExecuteAsync(string userRequest)
     {
-        // Create a prompt that helps the kernel understand intent and route to the right function
+  // Create a prompt that helps the kernel understand intent and route to the right function
  string routingPrompt = $@"Analyze the following user request and determine what action to take:
 
 User Request: ""{userRequest}""
@@ -47,24 +48,24 @@ Return in format: FUNCTION_NAME|PARAMETER
 Example: reverse_text|hello world
 Example: search_news|artificial intelligence";
 
-        try
+  try
   {
 // Get the routing decision from the kernel
      FunctionResult routingResult = await _kernel.InvokePromptAsync(routingPrompt);
-     string routingDecision = routingResult.ToString().Trim();
+ string routingDecision = routingResult.ToString().Trim();
 
-          // Parse the routing decision
-    string[] parts = routingDecision.Split('|', 2);
-            if (parts.Length != 2)
-      {
+    // Parse the routing decision
+string[] parts = routingDecision.Split('|', 2);
+          if (parts.Length != 2)
+   {
       throw new InvalidOperationException($"Invalid routing decision: {routingDecision}");
   }
 
-        string functionName = parts[0].Trim();
+  string functionName = parts[0].Trim();
    string parameter = parts[1].Trim();
 
 // Execute the determined function
-            KernelPlugin plugin = _kernel.Plugins["TextProcessing"];
+ KernelPlugin plugin = _kernel.Plugins["TextProcessing"];
             KernelFunction function = plugin[functionName];
 
    KernelArguments arguments = new() { ["input"] = parameter, ["topic"] = parameter };
@@ -73,7 +74,7 @@ Example: search_news|artificial intelligence";
     }
         catch (Exception ex)
       {
-       // Fallback: try to manually parse the request
+  // Fallback: try to manually parse the request
    return await FallbackRouting(userRequest);
    }
     }
@@ -91,56 +92,95 @@ Example: search_news|artificial intelligence";
 
         if (lowerRequest.Contains("reverse") || lowerRequest.Contains(":") && lowerRequest.StartsWith("reverse"))
   {
-            command = "reverse_text";
+command = "reverse_text";
    parameter = ExtractParameter(userRequest, "reverse");
-        }
+     }
   else if (lowerRequest.Contains("uppercase") || lowerRequest.Contains("upper") || 
      (lowerRequest.Contains(":") && lowerRequest.StartsWith("upper")))
     {
    command = "uppercase_text";
   parameter = ExtractParameter(userRequest, "upper");
-        }
+    }
     else if (lowerRequest.Contains("news") || lowerRequest.Contains("search"))
-        {
+    {
   command = "search_news";
   parameter = ExtractParameter(userRequest, "news");
-        }
+      }
   else
       {
-        throw new InvalidOperationException($"Unable to determine action for request: {userRequest}");
+    throw new InvalidOperationException($"Unable to determine action for request: {userRequest}");
 }
 
-        KernelPlugin plugin = _kernel.Plugins["TextProcessing"];
-        KernelFunction function = plugin[command];
-        
+      KernelPlugin plugin = _kernel.Plugins["TextProcessing"];
+     KernelFunction function = plugin[command];
+   
         KernelArguments arguments = new() { ["input"] = parameter, ["topic"] = parameter };
    
-        return await _kernel.InvokeAsync(function, arguments);
-    }
+     return await _kernel.InvokeAsync(function, arguments);
+}
 
     /// <summary>
-    /// Extracts the parameter from a command string
+    /// Extracts the parameter from a command string using improved pattern matching
     /// </summary>
     private string ExtractParameter(string request, string command)
     {
-        // Try to extract after colon
- if (request.Contains(':'))
-   {
-            int colonIndex = request.IndexOf(':');
-         return request.Substring(colonIndex + 1).Trim();
+        // Try to extract after colon first (standard format like "reverse: text")
+        if (request.Contains(':'))
+      {
+   int colonIndex = request.IndexOf(':');
+            return request.Substring(colonIndex + 1).Trim();
         }
 
-// Try to extract after the command word
-    int commandIndex = request.IndexOf(command, StringComparison.OrdinalIgnoreCase);
+        // Try to extract quoted text (e.g., "reverse 'text'" or "reverse \"text\"")
+ var singleQuoteMatch = Regex.Match(request, @"'([^']+)'");
+        if (singleQuoteMatch.Success)
+        {
+            return singleQuoteMatch.Groups[1].Value;
+        }
+
+   var doubleQuoteMatch = Regex.Match(request, @"""([^""]+)""");
+    if (doubleQuoteMatch.Success)
+        {
+            return doubleQuoteMatch.Groups[1].Value;
+        }
+
+        // Try to extract after common patterns
+    // Patterns: "reverse string X", "reverse text X", "reverse the text X", etc.
+        string[] patterns = new[]
+  {
+    $@"{command}\s+(?:string|text|the\s+(?:string|text|word|phrase))\s+['""]?([^'""]+)['""]?",
+          $@"{command}\s+(?:this|the)?\s*['""]?([^'""]+)['""]?",
+       $@"{command}\s+(.+)"
+      };
+
+        foreach (string pattern in patterns)
+        {
+            var match = Regex.Match(request, pattern, RegexOptions.IgnoreCase);
+      if (match.Success && match.Groups.Count > 1)
+{
+         string extracted = match.Groups[1].Value.Trim();
+    // Clean up common trailing words
+      extracted = Regex.Replace(extracted, @"\s*(?:please|now|thanks?)\s*$", "", RegexOptions.IgnoreCase).Trim();
+         if (!string.IsNullOrWhiteSpace(extracted))
+         {
+   return extracted;
+            }
+         }
+        }
+
+        // Fallback: extract after the command word
+        int commandIndex = request.IndexOf(command, StringComparison.OrdinalIgnoreCase);
         if (commandIndex >= 0)
         {
             string afterCommand = request.Substring(commandIndex + command.Length).Trim();
-       // Remove common words
-     afterCommand = afterCommand.TrimStart(':', ' ', '-');
- return afterCommand;
-      }
+            // Remove common words
+            afterCommand = afterCommand.TrimStart(':', ' ', '-');
+    // Remove leading filler words
+afterCommand = Regex.Replace(afterCommand, @"^(?:the|this|string|text|word|phrase)\s+", "", RegexOptions.IgnoreCase).Trim();
+            return afterCommand;
+        }
 
-        return request;
+ return request;
     }
 
     /// <summary>
@@ -148,7 +188,7 @@ Example: search_news|artificial intelligence";
     /// </summary>
     public async Task<(string functionName, string parameter)> DetermineIntentAsync(string userRequest)
     {
-        string intentPrompt = $@"Analyze this user request and extract the intent and parameter:
+   string intentPrompt = $@"Analyze this user request and extract the intent and parameter:
 
 Request: ""{userRequest}""
 
@@ -163,17 +203,18 @@ Functions available:
 Examples:
 Input: ""reverse: hello world"" ? reverse_text|hello world
 Input: ""find news about AI"" ? search_news|AI
-Input: ""make this UPPER: test"" ? uppercase_text|test";
+Input: ""make this UPPER: test"" ? uppercase_text|test
+Input: ""reverse string 'Hi Ravi?'"" ? reverse_text|Hi Ravi?";
 
-      FunctionResult result = await _kernel.InvokePromptAsync(intentPrompt);
+        FunctionResult result = await _kernel.InvokePromptAsync(intentPrompt);
         string response = result.ToString().Trim();
 
-   string[] parts = response.Split('|', 2);
+        string[] parts = response.Split('|', 2);
         if (parts.Length == 2)
-   {
-          return (parts[0].Trim(), parts[1].Trim());
-    }
+        {
+        return (parts[0].Trim(), parts[1].Trim());
+        }
 
- throw new InvalidOperationException($"Could not determine intent from: {userRequest}");
+        throw new InvalidOperationException($"Could not determine intent from: {userRequest}");
     }
 }
