@@ -132,6 +132,7 @@ Console.WriteLine($"Agent Card URL: http://localhost:5054/.well-known/agent.json
 Console.WriteLine($"Swagger UI: http://localhost:5054/swagger");
 Console.WriteLine($"Transport: a2a-news (Named Pipe)");
 Console.WriteLine($"Capability: news");
+Console.WriteLine($"Registry: Static (no dynamic registration needed)");
 Console.WriteLine($"Usage: Send 'news: <topic>' to search for news");
 Console.WriteLine("═══════════════════════════════════════════════════════════");
 Console.WriteLine();

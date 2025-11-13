@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using A2A;
-using Agent2AgentProtocol.Discovery.Service;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -16,11 +15,11 @@ using Semantic.Kernel.Agent2AgentProtocol.Client;
 using Semantic.Kernel.Agent2AgentProtocol.Example.Agent1;
 using Semantic.Kernel.Agent2AgentProtocol.Example.Core.A2A;
 using Semantic.Kernel.Agent2AgentProtocol.Example.Core.Messaging;
+using Semantic.Kernel.Agent2AgentProtocol.Example.Core.Registry;
 
 var services = new ServiceCollection();
 services.AddLogging(b => b.AddConsole());
 
-const string DiscoveryUrl = "http://localhost:5000/list";
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 builder.WebHost.UseUrls("http://localhost:5050");
 
@@ -63,6 +62,31 @@ else
 WebApplication app = builder.Build();
 app.UseSwagger();
 app.UseSwaggerUI();
+
+// Initialize AgentRegistry by loading Agent Cards from endpoints
+try
+{
+    var httpClient = app.Services.GetRequiredService<IHttpClientFactory>().CreateClient();
+    await AgentRegistry.InitializeAsync(httpClient);
+    Console.WriteLine("AgentRegistry initialized from Agent Card endpoints");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"Failed to initialize AgentRegistry from endpoints: {ex.Message}");
+    Console.WriteLine("Using fallback static configuration...");
+    AgentRegistry.InitializeFallback();
+}
+
+Console.WriteLine("═══════════════════════════════════════════════════════════");
+Console.WriteLine("   Agent 1 - Orchestrator Agent");
+Console.WriteLine("═══════════════════════════════════════════════════════════");
+Console.WriteLine($"Agent Card URL: http://localhost:5050/.well-known/agent.json");
+Console.WriteLine($"Swagger UI: http://localhost:5050/swagger");
+Console.WriteLine($"API Endpoint: http://localhost:5050/api/client/post");
+Console.WriteLine($"Using: Static Agent Registry (loaded from Agent Cards)");
+Console.WriteLine($"Available Agents: {string.Join(", ", AgentRegistry.GetAvailableSkills())}");
+Console.WriteLine("═══════════════════════════════════════════════════════════");
+Console.WriteLine();
 
 // A2A Standard: Agent Card endpoint for Agent1 (Orchestrator)
 app.MapGet("/.well-known/agent.json", () =>
@@ -111,6 +135,65 @@ app.MapGet("/agent.json", () =>
 .WithName("GetAgentCardAlternative")
 .ExcludeFromDescription();
 
+// Endpoint to list available agents from static registry
+app.MapGet("/api/agents", () =>
+{
+    var agents = AgentRegistry.GetAllAgents()
+        .Select(kvp => new
+        {
+            Skill = kvp.Value.Skill,
+            Name = kvp.Value.Name,
+            AgentId = kvp.Value.AgentId,
+            Description = kvp.Value.Description,
+            Address = kvp.Value.Address,
+            Port = kvp.Value.Port,
+            AgentCardUrl = kvp.Value.AgentCardUrl,
+            Capabilities = kvp.Value.Capabilities.Select(c => new
+            {
+                c.Name,
+                c.Description,
+                c.Tags
+            })
+        });
+
+    return Results.Ok(agents);
+})
+.WithName("GetAvailableAgents")
+.WithSummary("Get all available agents from static registry")
+.WithDescription("Returns a list of all agents registered in the static registry (loaded from Agent Card endpoints)")
+.Produces(200);
+
+// Endpoint to refresh agent registry from Agent Card endpoints
+app.MapPost("/api/agents/refresh", async (IHttpClientFactory httpClientFactory) =>
+{
+    try
+    {
+        var httpClient = httpClientFactory.CreateClient();
+        await AgentRegistry.RefreshAsync(httpClient);
+        
+        var agents = AgentRegistry.GetAllAgents();
+        return Results.Ok(new
+        {
+            Message = "Agent registry refreshed successfully",
+            AgentCount = agents.Count,
+            Agents = agents.Keys
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(
+            title: "Failed to refresh agent registry",
+            detail: ex.Message,
+            statusCode: 500
+        );
+    }
+})
+.WithName("RefreshAgentRegistry")
+.WithSummary("Refresh agent registry from Agent Card endpoints")
+.WithDescription("Reloads all agent information from their Agent Card endpoints (.well-known/agent.json)")
+.Produces(200)
+.Produces(500);
+
 app.MapPost("/api/client/post", async (
     HttpContext context,
     IHttpClientFactory httpClientFactory,
@@ -130,7 +213,6 @@ app.MapPost("/api/client/post", async (
         }
 
         // Normalize any multiline content in the raw JSON before parsing
-        // This handles newlines within JSON property values
         string normalizedBody = rawBody;
 
         // Try to deserialize as ClientRequest object first (for Swagger UI)
@@ -152,7 +234,6 @@ app.MapPost("/api/client/post", async (
         }
         catch(JsonException ex1)
         {
-            // First attempt failed - could be plain string format or malformed JSON
             // Try to deserialize as plain JSON string (for backward compatibility)
             try
             {
@@ -160,18 +241,13 @@ app.MapPost("/api/client/post", async (
             }
             catch(JsonException ex2)
             {
-                // Both object and string parsing failed
-                // Last resort: try to fix newlines in plain string format and retry
+                // Last resort: try to fix newlines in plain string format
                 string fixedJson = normalizedBody;
 
-                // Handle unescaped newlines within the JSON string
                 if(fixedJson.StartsWith("\"") && fixedJson.EndsWith("\""))
                 {
-                    // Remove outer quotes
                     string content = fixedJson.Substring(1, fixedJson.Length - 2);
-                    // Replace newlines with spaces
                     content = content.Replace("\r\n", " ").Replace("\n", " ").Replace("\r", " ");
-                    // Rebuild JSON
                     fixedJson = JsonSerializer.Serialize(content);
 
                     try
@@ -180,12 +256,12 @@ app.MapPost("/api/client/post", async (
                     }
                     catch(JsonException ex3)
                     {
-                        return Results.BadRequest($"Failed to parse request body. Original errors - Object format: {ex1.Message}, String format: {ex2.Message}, Fixed format: {ex3.Message}");
+                        return Results.BadRequest($"Failed to parse request body. Object format: {ex1.Message}, String format: {ex2.Message}, Fixed: {ex3.Message}");
                     }
                 }
                 else
                 {
-                    return Results.BadRequest($"Failed to parse request body. Object format error: {ex1.Message}, String format error: {ex2.Message}");
+                    return Results.BadRequest($"Failed to parse request body. Object: {ex1.Message}, String: {ex2.Message}");
                 }
             }
         }
@@ -202,107 +278,94 @@ app.MapPost("/api/client/post", async (
     capability = capability.Replace("\r\n", " ").Replace("\n", " ").Replace("\r", " ");
     capability = System.Text.RegularExpressions.Regex.Replace(capability, @"\s+", " ").Trim();
 
-    HttpClient client = httpClientFactory.CreateClient();
-
-    // Step 1: Get all agents from discovery service
-    Dictionary<string, AgentCapability> agentsDict;
-    try
-    {
-        string json = await client.GetStringAsync(DiscoveryUrl);
-        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        agentsDict = JsonSerializer.Deserialize<Dictionary<string, AgentCapability>>(json, options)
-                ?? new Dictionary<string, AgentCapability>();
-    }
-    catch(Exception ex)
-    {
-        return Results.Json(new
-        {
-            Error = "Failed to parse or contact discovery service",
-            Details = ex.Message
-        });
-    }
-
-    if(!agentsDict.Any())
-        return Results.NotFound(new { Message = "No agents registered in discovery service." });
+    // Step 1: Get all agents from static registry (no HTTP call needed!)
+    var agents = AgentRegistry.GetAllAgents();
+    
+    if(!agents.Any())
+        return Results.NotFound(new { Message = "No agents available in static registry." });
 
     // Step 2: Use LLM to intelligently determine target agent and extract content
     Kernel kernel = serviceProvider.GetRequiredService<Kernel>();
-    (string targetSkill, string extractedContent) = await DetermineTargetAgentWithLLM(
-   kernel, capability, agentsDict.Values.ToList());
-
-    // Step 3: Find agents matching the determined skill
-    var matchedAgents = agentsDict.Values
-        .Where(a => string.Equals(a.Skill?.Trim(), targetSkill, StringComparison.OrdinalIgnoreCase))
-     .ToList();
-
-    // If no exact match, try to match any agent (they will use router internally)
-    if(!matchedAgents.Any())
+    
+    // Convert to list for LLM processing
+    var agentsList = agents.Select(kvp => new
     {
-        matchedAgents = agentsDict.Values.ToList();
+        Skill = kvp.Value.Skill,
+        Name = kvp.Value.Name,
+        Description = kvp.Value.Description,
+        Capabilities = kvp.Value.Capabilities.Select(c => new
+        {
+            c.Name,
+            c.Description
+        }).ToList()
+    }).Cast<object>().ToList();
+    
+    (string targetSkill, string extractedContent) = await DetermineTargetAgentWithLLM(
+        kernel, capability, agentsList);
+
+    // Step 3: Resolve agent from static registry
+    var registration = AgentRegistry.ResolveAgent(targetSkill);
+    
+    if(registration == null)
+    {
+        return Results.NotFound(new 
+        { 
+            Message = $"No agent found for skill: {targetSkill}",
+            AvailableSkills = AgentRegistry.GetAvailableSkills()
+        });
     }
 
-    // Step 4: Resolve and invoke agents
+    // Step 4: Connect to agent and send request
     var agentResponses = new List<object>();
     TransportManager transportManager = serviceProvider.GetRequiredService<TransportManager>();
 
-    foreach(AgentCapability? agent in matchedAgents)
+    try
     {
-        try
+        // Get or create transport for this agent
+        IMessagingTransport transport = await transportManager.GetOrCreateTransportAsync(
+            registration.Address,
+            serviceProvider.GetRequiredService<ILogger<NamedPipeTransport>>());
+
+        Agent1 agent1 = serviceProvider.GetRequiredService<Agent1>();
+
+        // Build request with extracted content
+        string targetAgentName = registration.AgentId;
+        string messageText = !string.IsNullOrWhiteSpace(extractedContent) ? extractedContent : capability;
+        AgentMessage request = A2AHelper.BuildTaskRequest(messageText, "Agent1", targetAgentName);
+
+        // Create a timeout cancellation token
+        string lowerCapability = capability.ToLowerInvariant();
+        int timeoutSeconds = registration.Skill == "news" || lowerCapability.Contains("news") ? 60 : 30;
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+        
+        string? response = await agent1.SendRequestAsync(transport, request, cts.Token);
+
+        agentResponses.Add(new
         {
-            string resolveUrl = $"http://localhost:5000/resolve/{agent.Skill}";
-            AgentCapability? endpoint = await client.GetFromJsonAsync<AgentCapability>(resolveUrl);
-            if(endpoint != null)
-            {
-                // Get or create transport for this endpoint
-                IMessagingTransport transport = await transportManager.GetOrCreateTransportAsync(
-           endpoint.Address,
-                  serviceProvider.GetRequiredService<ILogger<NamedPipeTransport>>());
-
-                Agent1 agent1 = serviceProvider.GetRequiredService<Agent1>();
-
-                // Build request with extracted content - let the agent router handle it
-                string targetAgentName = agent.AgentId ?? GetAgentNameFromSkill(agent.Skill);
-                // Use extracted content if available, otherwise use original capability
-                string messageText = !string.IsNullOrWhiteSpace(extractedContent) ? extractedContent : capability;
-                AgentMessage request = A2AHelper.BuildTaskRequest(messageText, "Agent1", targetAgentName);
-
-                // Create a timeout cancellation token
-                string lowerCapability = capability.ToLowerInvariant();
-                int timeoutSeconds = agent.Skill == "news" || lowerCapability.Contains("news") ? 60 : 30;
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
-                string? response = await agent1.SendRequestAsync(transport, request, cts.Token);
-
-                agentResponses.Add(new
-                {
-                    Agent = agent.Skill,
-                    Endpoint = endpoint.Address,
-                    Response = response ?? "No response received",
-                    Success = response != null
-                });
-
-                // If we got a successful response, break (don't query all agents)
-                if(response != null && !response.Contains("[error]"))
-                {
-                    break;
-                }
-            }
-        }
-        catch(OperationCanceledException)
+            Agent = registration.Skill,
+            AgentId = registration.AgentId,
+            Endpoint = registration.Address,
+            Response = response ?? "No response received",
+            Success = response != null
+        });
+    }
+    catch(OperationCanceledException)
+    {
+        agentResponses.Add(new
         {
-            agentResponses.Add(new
-            {
-                Agent = agent.Skill,
-                Error = "Request timed out"
-            });
-        }
-        catch(Exception ex)
+            Agent = registration.Skill,
+            AgentId = registration.AgentId,
+            Error = "Request timed out"
+        });
+    }
+    catch(Exception ex)
+    {
+        agentResponses.Add(new
         {
-            agentResponses.Add(new
-            {
-                Agent = agent.Skill,
-                Error = ex.Message
-            });
-        }
+            Agent = registration.Skill,
+            AgentId = registration.AgentId,
+            Error = ex.Message
+        });
     }
 
     return Results.Ok(new
@@ -310,13 +373,19 @@ app.MapPost("/api/client/post", async (
         Request = capability,
         DeterminedSkill = targetSkill,
         ExtractedContent = extractedContent,
-        MatchedCount = matchedAgents.Count,
+        TargetAgent = new
+        {
+            registration.AgentId,
+            registration.Name,
+            registration.Skill,
+            registration.Address
+        },
         Responses = agentResponses
     });
 })
 .WithName("PostClientCapability")
 .WithSummary("Posts a natural language request to matching agents")
-.WithDescription(@"Uses LLM to intelligently route requests to agents. Automatically extracts relevant content and determines the best agent.
+.WithDescription(@"Uses LLM to intelligently route requests to agents using static registry. Automatically extracts relevant content and determines the best agent.
 
 Send request as JSON object: { ""prompt"": ""your request here"" }
 Or as plain JSON string: ""your request here""
@@ -336,33 +405,40 @@ await app.RunAsync();
 static async Task<(string skill, string content)> DetermineTargetAgentWithLLM(
     Kernel kernel,
     string userRequest,
-    List<AgentCapability> availableAgents)
+    List<object> availableAgents)
 {
     try
     {
         // Build list of available agents and their capabilities
         var agentDescriptions = string.Join("\n", availableAgents.Select(a =>
-            $"- {a.Skill}: {string.Join(", ", a.Capabilities?.Select(c => c.Description) ?? new[] { a.Name })}"));
+        {
+            dynamic agent = a;
+            var capabilities = agent.Capabilities as IEnumerable<dynamic>;
+            var capDesc = capabilities?.Select(c => c.Description?.ToString() ?? "") ?? Enumerable.Empty<string>();
+            return $"- {agent.Skill}: {string.Join(", ", capDesc.Where(s => !string.IsNullOrEmpty(s)))}";
+        }));
 
         string prompt = $@"Analyze the following user request and determine which agent should handle it.
-                        User Request: ""{userRequest}""
-                        Available Agents:
-                        {agentDescriptions}
 
-                        Your task:
-                        1. Determine which agent skill best matches the user's intent
-                        2. Extract the relevant content/parameter that should be sent to that agent
+User Request: ""{userRequest}""
 
-                        Respond ONLY in this format (no extra text):
-                        SKILL|CONTENT
+Available Agents:
+{agentDescriptions}
 
-                        Examples:
-                        Input: ""reverse the string 'Hello World'"" → reverse|Hello World
-                        Input: ""find news about AI"" → news|AI
-                        Input: ""make this UPPERCASE: test"" → uppercase|test
-                        Input: ""reverse below string Hi Ravi?"" → reverse|Hi Ravi?
+Your task:
+1. Determine which agent skill best matches the user's intent
+2. Extract the relevant content/parameter that should be sent to that agent
 
-                        Now analyze the user request and respond:";
+Respond ONLY in this format (no extra text):
+SKILL|CONTENT
+
+Examples:
+Input: ""reverse the string 'Hello World'"" → reverse|Hello World
+Input: ""find news about AI"" → news|AI
+Input: ""make this UPPERCASE: test"" → uppercase|test
+Input: ""reverse below string Hi Ravi?"" → reverse|Hi Ravi?
+
+Now analyze the user request and respond:";
 
         FunctionResult result = await kernel.InvokePromptAsync(prompt);
         string response = result.ToString().Trim();
@@ -399,16 +475,4 @@ static (string skill, string content) FallbackDetermineTargetSkill(string reques
 
     // Default to reverse
     return ("reverse", request);
-}
-
-// Helper to get agent name from skill
-static string GetAgentNameFromSkill(string skill)
-{
-    return skill?.ToLowerInvariant() switch
-    {
-        "reverse" => "Agent2",
-        "uppercase" => "Agent3",
-        "news" => "Agent4",
-        _ => "Agent2"
-    };
 }

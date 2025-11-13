@@ -9,7 +9,7 @@ builder.WebHost.UseUrls("http://localhost:5000");
 // Register services
 builder.Services.AddSingleton<ICapabilityRegistry, InMemoryCapabilityRegistry>();
 
-// ✅ Add Swagger services
+// Add Swagger services
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -23,7 +23,7 @@ builder.Services.AddSwaggerGen(options =>
 
 WebApplication app = builder.Build();
 
-// ✅ Enable Swagger middleware
+// Enable Swagger middleware
 if(app.Environment.IsDevelopment())
 {
     app.UseSwagger();

@@ -1,8 +1,8 @@
-# Migration Guide: Discovery Service vs Static Registry
+﻿# Migration Guide: Discovery Service vs Static Registry
 
 ## Executive Summary
 
-**Recommendation:** ? **Remove the Discovery Service** and use a **Static Registry** instead.
+**Recommendation:** **Remove the Discovery Service** and use a **Static Registry** instead.
 
 Your current setup with a fixed number of local agents is a perfect fit for the static registry pattern used in [Semantic Kernel's A2A samples](https://github.com/microsoft/semantic-kernel/blob/main/dotnet/samples/Demos/A2AClientServer/A2AServer/HostAgentFactory.cs).
 
@@ -13,55 +13,55 @@ Your current setup with a fixed number of local agents is a perfect fit for the 
 ### Current Architecture (With Discovery Service)
 
 ```
-???????????????????????????????????????????????????????????????
-?                     Discovery Service                         ?
-?                    (localhost:5000)                          ?
-?  - Maintains registry of agents                              ?
-?  - POST /register - Agents register on startup               ?
-?  - GET /resolve/{skill} - Resolve agent by skill            ?
-?  - GET /list - List all registered agents                    ?
-???????????????????????????????????????????????????????????????
-             ?                                  ?
-             ? Register                         ? Query
-             ? (HTTP POST)                      ? (HTTP GET)
-             ?                                  ?
-????????????????????              ????????????????????????????
-?   Agent2, 3, 4   ?              ?        Agent1            ?
-?   (Startup)      ?              ?    (Orchestrator)        ?
-????????????????????              ????????????????????????????
+┌─────────────────────────────────────────────────────────────┐
+│                     Discovery Service                         │
+│                    (localhost:5000)                          │
+│  - Maintains registry of agents                              │
+│  - POST /register - Agents register on startup               │
+│  - GET /resolve/{skill} - Resolve agent by skill            │
+│  - GET /list - List all registered agents                    │
+└─────────────────────────────────────────────────────────────┘
+             ▲                                  │
+             │ Register                         │ Query
+             │ (HTTP POST)                      │ (HTTP GET)
+             │                                  ▼
+┌──────────────────┐              ┌──────────────────────────┐
+│   Agent2, 3, 4   │              │        Agent1            │
+│   (Startup)      │              │    (Orchestrator)        │
+└──────────────────┘              └──────────────────────────┘
 
 Issues:
-? Requires separate service running
-? Network latency for lookups
-? More complexity
-? Registration can fail
-? Extra startup dependency
+❌ Requires separate service running
+❌ Network latency for lookups
+❌ More complexity
+❌ Registration can fail
+❌ Extra startup dependency
 ```
 
 ###Simplified Architecture (Static Registry)
 
 ```
-???????????????????????????????????????????????????????????????
-?                      AgentRegistry                           ?
-?                   (In-Memory, Static)                        ?
-?  - Hardcoded list of agents                                 ?
-?  - Instant lookups (no network)                             ?
-?  - No startup registration needed                            ?
-???????????????????????????????????????????????????????????????
-                                  ?
-                                  ? Query (In-Memory)
-                                  ?
-                     ????????????????????????????
-                     ?        Agent1            ?
-                     ?    (Orchestrator)        ?
-                     ????????????????????????????
+┌─────────────────────────────────────────────────────────────┐
+│                      AgentRegistry                           │
+│                   (In-Memory, Static)                        │
+│  - Hardcoded list of agents                                 │
+│  - Instant lookups (no network)                             │
+│  - No startup registration needed                            │
+└─────────────────────────────────────────────────────────────┘
+                                  │
+                                  │ Query (In-Memory)
+                                  ▼
+                     ┌──────────────────────────┐
+                     │        Agent1            │
+                     │    (Orchestrator)        │
+                     └──────────────────────────┘
 
 Benefits:
-? No separate service needed
-? Zero network latency
-? Simpler architecture
-? No registration failures
-? Faster development
+No separate service needed
+Zero network latency
+Simpler architecture
+No registration failures
+Faster development
 ```
 
 ---
@@ -69,27 +69,27 @@ Benefits:
 ## When to Use Each Approach
 
 ### Use Static Registry When:
-? **Fixed set of agents** - Agents don't change frequently  
-? **Local deployment** - All agents on same machine  
-? **Development/Testing** - Rapid iteration needed  
-? **Small scale** - < 10 agents  
-? **Configuration-driven** - Agent list known at compile/config time  
+**Fixed set of agents** - Agents don't change frequently  
+**Local deployment** - All agents on same machine  
+**Development/Testing** - Rapid iteration needed  
+**Small scale** - < 10 agents  
+**Configuration-driven** - Agent list known at compile/config time  
 
-**?? This matches your scenario perfectly!**
+**👉 This matches your scenario perfectly!**
 
 ### Use Discovery Service When:
-? **Dynamic registration** - Agents join/leave at runtime  
-? **Distributed system** - Agents on different machines  
-? **Production microservices** - Need service discovery  
-? **Load balancing** - Multiple instances of same agent  
-? **Multi-tenant** - Different agent sets per tenant  
-? **Large scale** - 10+ agents  
+**Dynamic registration** - Agents join/leave at runtime  
+**Distributed system** - Agents on different machines  
+**Production microservices** - Need service discovery  
+**Load balancing** - Multiple instances of same agent  
+**Multi-tenant** - Different agent sets per tenant  
+**Large scale** - 10+ agents  
 
 ---
 
 ## Migration Steps
 
-### Step 1: Add Static Registry (Already Done ?)
+### Step 1: Add Static Registry (Already Done ✅)
 
 File created: `Semantic.Kernel.Agent2AgentProtocol.Example.Core\Registry\AgentRegistry.cs`
 
@@ -261,7 +261,7 @@ static async Task<(string skill, string content)> DetermineTargetAgentWithLLM(
 
 ## Migration Checklist
 
-- [ ] Add `AgentRegistry.cs` to Core project (? Done)
+- [ ] Add `AgentRegistry.cs` to Core project (Done)
 - [ ] Update Agent1 to use `AgentRegistry` instead of HTTP calls
 - [ ] Remove discovery service registration from Agent2
 - [ ] Remove discovery service registration from Agent3
@@ -330,15 +330,15 @@ public static class AgentDiscovery
 
 ## Conclusion
 
-**Recommendation: Remove the Discovery Service** ?
+**Recommendation: Remove the Discovery Service** ✅
 
 Your use case (fixed agents, local deployment, development focus) is **perfectly suited** for the static registry pattern. This matches the approach used in Semantic Kernel's official samples and will:
 
-? Simplify your architecture  
-? Improve performance  
-? Reduce complexity  
-? Make development faster  
-? Eliminate a point of failure  
+Simplify your architecture  
+Improve performance  
+Reduce complexity  
+Make development faster  
+Eliminate a point of failure  
 
 The Discovery Service adds unnecessary overhead for your scenario. Save it for when you truly need dynamic service discovery in a distributed production environment.
 

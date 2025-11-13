@@ -1,4 +1,4 @@
-# Quick Start: Testing A2A Agent Cards
+﻿# Quick Start: Testing A2A Agent Cards
 
 ## Start All Agents
 
@@ -70,14 +70,14 @@ Each agent has Swagger UI:
 Each agent logs its Agent Card URL on startup:
 
 ```
-???????????????????????????????????????????????????????????
+═══════════════════════════════════════════════════════════
    Agent 2 - Text Reversal Agent
-???????????????????????????????????????????????????????????
+═══════════════════════════════════════════════════════════
 Agent Card URL: http://localhost:5052/.well-known/agent.json
 Swagger UI: http://localhost:5052/swagger
 Transport: a2a-reverse (Named Pipe)
 Capability: reverse
-???????????????????????????????????????????????????????????
+═══════════════════════════════════════════════════════════
 ```
 
 ## Verify Implementation
@@ -94,11 +94,11 @@ $agents = @(
 
 foreach ($agent in $agents) {
     Write-Host "`n$($agent.Name)" -ForegroundColor Cyan
-    Write-Host "???????????????????????????" -ForegroundColor Cyan
+    Write-Host "═══════════════════════════" -ForegroundColor Cyan
     
     try {
         $card = Invoke-RestMethod "http://localhost:$($agent.Port)/.well-known/agent.json"
-        Write-Host "? Agent Card accessible" -ForegroundColor Green
+        Write-Host "✓ Agent Card accessible" -ForegroundColor Green
         Write-Host "  Name: $($card.name)"
         Write-Host "  Skills: $($card.skills.Count)"
         foreach ($skill in $card.skills) {
@@ -106,7 +106,7 @@ foreach ($agent in $agents) {
         }
     }
     catch {
-        Write-Host "? Agent Card not accessible" -ForegroundColor Red
+        Write-Host "✗ Agent Card not accessible" -ForegroundColor Red
         Write-Host "  Error: $($_.Exception.Message)"
     }
 }
@@ -119,9 +119,9 @@ Save as `test-agent-cards.ps1` and run:
 
 ## Expected Results
 
-? All agents expose Agent Cards at `/.well-known/agent.json`  
-? All Agent Cards return valid JSON  
-? All skills are documented with examples  
-? Swagger UI accessible for all agents  
+All agents expose Agent Cards at `/.well-known/agent.json`  
+All Agent Cards return valid JSON  
+All skills are documented with examples  
+Swagger UI accessible for all agents  
 
-**Your A2A Agent Cards are now live!** ??
+**Your A2A Agent Cards are now live!** 🎉

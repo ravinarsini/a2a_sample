@@ -29,7 +29,7 @@ public class Agent3(
 
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("[Agent-3] waiting for task...");
+        _logger.LogInformation("[Agent-3] Starting (registered in static registry)...");
 
         // Import the TextProcessing plugin
         kernel.ImportPluginFromType<TextProcessingPlugin>("TextProcessing");
@@ -37,18 +37,8 @@ public class Agent3(
         // Initialize router after plugin is imported
         _router = new AgentRouter(kernel);
 
-        // Register capabilities with discovery service
-        using var client = new HttpClient();
-        string json = File.ReadAllText("uppercase.card.json");
-        AgentCapability? capability = JsonSerializer.Deserialize<AgentCapability>(json);
-        if (capability is null)
-        {
-            throw new InvalidOperationException("Failed to deserialize AgentCapability from uppercase.card.json.");
-        }
-        string transportType = "NamedPipe";
-        var endpoint = new AgentEndpoint { TransportType = transportType, Address = _options.QueueOrPipeName };
-        await client.PostAsJsonAsync("http://localhost:5000/register", new { capability, endpoint }, cancellationToken);
-        _logger.LogInformation("[Agent-3] Registered capabilities with discovery service");
+        // No need to register with discovery service - using static registry
+        _logger.LogInformation("[Agent-3] Waiting for tasks on transport: {Transport}", _options.QueueOrPipeName);
 
         await _transport.StartProcessingAsync(async json =>
         {
