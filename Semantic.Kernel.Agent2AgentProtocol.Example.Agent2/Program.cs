@@ -8,6 +8,8 @@ using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
 using Semantic.Kernel.Agent2AgentProtocol.Example.Agent2;
 using Semantic.Kernel.Agent2AgentProtocol.Example.Core.Messaging;
+using Semantic.Kernel.Agent2AgentProtocol.Example.Core.SemanticKernel;
+using System.Text.Json;
 
 var services = new ServiceCollection();
 services.AddLogging(b => b.AddConsole());
@@ -94,6 +96,7 @@ Console.WriteLine($"Agent Card URL: http://localhost:5052/.well-known/agent.json
 Console.WriteLine($"Swagger UI: http://localhost:5052/swagger");
 Console.WriteLine($"Transport: a2a-reverse (Named Pipe)");
 Console.WriteLine($"Capability: reverse");
+Console.WriteLine($"Registry: Static (no dynamic registration needed)");
 Console.WriteLine("═══════════════════════════════════════════════════════════");
 Console.WriteLine();
 

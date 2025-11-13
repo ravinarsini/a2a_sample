@@ -1,7 +1,6 @@
 ﻿using System.Net.Http.Json;
 using System.Text.Json;
 using A2A;
-using Agent2AgentProtocol.Discovery.Service;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
@@ -24,7 +23,7 @@ public class Agent4(
 
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("[Agent-4] News Agent waiting for tasks...");
+        _logger.LogInformation("[Agent-4] Starting (registered in static registry)...");
 
         // Import the TextProcessing plugin
         kernel.ImportPluginFromType<TextProcessingPlugin>("TextProcessing");
@@ -32,18 +31,8 @@ public class Agent4(
         // Initialize router after plugin is imported
         _router = new AgentRouter(kernel);
 
-        // Register capabilities with discovery service
-        using var client = new HttpClient();
-        string json = File.ReadAllText("news.card.json");
-        AgentCapability? capability = JsonSerializer.Deserialize<AgentCapability>(json);
-        if(capability is null)
-        {
-            throw new InvalidOperationException("Failed to deserialize AgentCapability from news.card.json.");
-        }
-        string transportType = "NamedPipe";
-        var endpoint = new AgentEndpoint { TransportType = transportType, Address = _options.QueueOrPipeName };
-        await client.PostAsJsonAsync("http://localhost:5000/register", new { capability, endpoint }, cancellationToken);
-        _logger.LogInformation("[Agent-4] Registered news capability with discovery service");
+        // No need to register with discovery service - using static registry
+        _logger.LogInformation("[Agent-4] Waiting for tasks on transport: {Transport}", _options.QueueOrPipeName);
 
         await _transport.StartProcessingAsync(async json =>
         {

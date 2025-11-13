@@ -1,4 +1,4 @@
-# A2A Standard Agent Card URLs Implementation
+﻿# A2A Standard Agent Card URLs Implementation
 
 ## Overview
 
@@ -44,9 +44,9 @@ An Agent Card is a machine-readable description of an agent's capabilities, foll
       "description": "Intelligently routes requests to appropriate specialized agents (reverse, uppercase, news) using LLM analysis",
       "tags": ["orchestration", "routing", "llm-powered", "multi-agent"],
       "examples": [
-        "Input: 'reverse the string Hello' ? Routes to Agent2",
-        "Input: 'make this UPPERCASE: test' ? Routes to Agent3",
-        "Input": 'find news about AI' ? Routes to Agent4"
+        "Input: 'reverse the string Hello' → Routes to Agent2",
+        "Input: 'make this UPPERCASE: test' → Routes to Agent3",
+        "Input": 'find news about AI' → Routes to Agent4"
       ]
     }
   ]
@@ -72,7 +72,7 @@ An Agent Card is a machine-readable description of an agent's capabilities, foll
       "name": "reverse",
       "description": "Reverses the input text character by character",
       "tags": ["text-processing", "string-manipulation"],
-      "examples": ["Input: 'hello' ? Output: 'olleh'"]
+      "examples": ["Input: 'hello' → Output: 'olleh'"]
     }
   ]
 }
@@ -97,7 +97,7 @@ An Agent Card is a machine-readable description of an agent's capabilities, foll
       "name": "uppercase",
       "description": "Converts the input text to uppercase letters",
       "tags": ["text-processing", "string-manipulation", "case-conversion"],
-      "examples": ["Input: 'hello world' ? Output: 'HELLO WORLD'"]
+      "examples": ["Input: 'hello world' → Output: 'HELLO WORLD'"]
     }
   ]
 }
@@ -123,9 +123,9 @@ An Agent Card is a machine-readable description of an agent's capabilities, foll
       "description": "Searches for and summarizes the latest news articles about a given topic using AI",
       "tags": ["news", "search", "ai-powered", "information-retrieval"],
       "examples": [
-        "Input: 'AI' ? Output: Latest news about artificial intelligence",
-        "Input: 'climate change' ? Output: Recent climate change news",
-        "Input: 'politics in India' ? Output: Current Indian political news"
+        "Input: 'AI' → Output: Latest news about artificial intelligence",
+        "Input: 'climate change' → Output: Recent climate change news",
+        "Input: 'politics in India' → Output: Current Indian political news"
       ]
     }
   ]
@@ -194,21 +194,21 @@ This follows the **RFC 8615** well-known URI standard used for service discovery
 
 ### Features Implemented
 
-? **Agent Metadata**
+**Agent Metadata**
 - Name, description, version
 - Base URL for the agent
 
-? **Capabilities Declaration**
+**Capabilities Declaration**
 - Streaming support indication
 - Input/output modes
 
-? **Skills Documentation**
+**Skills Documentation**
 - Skill ID and name
 - Detailed descriptions
 - Tags for categorization
 - Usage examples
 
-? **Swagger Integration**
+**Swagger Integration**
 - All endpoints documented in Swagger UI
 - Interactive testing available
 
@@ -252,11 +252,11 @@ Agents register with the discovery service AND expose their own Agent Card:
 
 ```
 Agent starts
-    ?
-Register with Discovery Service ? POST /register
-    ?
-Expose Agent Card ? GET /.well-known/agent.json
-    ?
+    ↓
+Register with Discovery Service → POST /register
+    ↓
+Expose Agent Card → GET /.well-known/agent.json
+    ↓
 Available for discovery via both methods
 ```
 
@@ -281,14 +281,14 @@ var skill = agentCard.Skills.FirstOrDefault(s => s.Id == "reverse");
 
 ## Files Changed
 
-? **Agent1/Program.cs** - Added Agent Card endpoint
-? **Agent2/Program.cs** - Added Agent Card endpoint  
-? **Agent3/Program.cs** - Added Agent Card endpoint  
-? **Agent4/Program.cs** - Added Agent Card endpoint  
+**Agent1/Program.cs** - Added Agent Card endpoint
+**Agent2/Program.cs** - Added Agent Card endpoint  
+**Agent3/Program.cs** - Added Agent Card endpoint  
+**Agent4/Program.cs** - Added Agent Card endpoint  
 
 ## Build Status
 
-? **Build Successful**
+**Build Successful**
 
 ## Benefits
 
@@ -357,7 +357,7 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 
 **What Was Added:** A2A standard Agent Card endpoints for all agents  
 **Standard:** `/.well-known/agent.json` (RFC 8615)  
-**Status:** ? Implemented and tested  
+**Status:** Implemented and tested  
 **Benefit:** Standardized, self-describing agent discovery  
 
-**All agents now expose their capabilities following the A2A protocol standard!** ??
+**All agents now expose their capabilities following the A2A protocol standard!** 🎉

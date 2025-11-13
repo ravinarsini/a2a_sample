@@ -24,67 +24,56 @@ public class Agent2(
 
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("[Agent-2] waiting for task...");
+        _logger.LogInformation("[Agent-2] Starting (registered in static registry)...");
      
         // Import the TextProcessing plugin
         kernel.ImportPluginFromType<TextProcessingPlugin>("TextProcessing");
  
-  // Initialize router after plugin is imported
+        // Initialize router after plugin is imported
         _router = new AgentRouter(kernel);
 
-        // Register capabilities with discovery service
-        using var client = new HttpClient();
-
-      string json = File.ReadAllText("reverse.card.json");
-        AgentCapability? capability = JsonSerializer.Deserialize<AgentCapability>(json);
- if (capability is null)
-{
- throw new InvalidOperationException("Failed to deserialize AgentCapability from reverse.card.json.");
-    }
-   string transportType = "NamedPipe";
-        var endpoint = new AgentEndpoint { TransportType = transportType, Address = _options.QueueOrPipeName };
-     await client.PostAsJsonAsync("http://localhost:5000/register", new { capability, endpoint }, cancellationToken);
- _logger.LogInformation("[Agent-2] Registered capabilities with discovery service");
+        // No need to register with discovery service - using static registry
+        _logger.LogInformation("[Agent-2] Waiting for tasks on transport: {Transport}", _options.QueueOrPipeName);
 
         await _transport.StartProcessingAsync(async json =>
- {
-       AgentMessage? message = JsonSerializer.Deserialize<AgentMessage>(json, A2AJsonUtilities.DefaultOptions);
-         if(message == null)
- return; // not a valid message
+        {
+            AgentMessage? message = JsonSerializer.Deserialize<AgentMessage>(json, A2AJsonUtilities.DefaultOptions);
+            if(message == null)
+                return; // not a valid message
 
-(string? text, string? from, string? to) = A2AHelper.ParseTaskRequest(message);
-    if(text == null)
-        return;  // not a task message
-        if(to != "Agent2")
-      {
-         _logger.LogWarning("[Agent-2] ignored message for {To}", to);
-  return;
- }
+            (string? text, string? from, string? to) = A2AHelper.ParseTaskRequest(message);
+            if(text == null)
+                return;  // not a task message
+            if(to != "Agent2")
+            {
+                _logger.LogWarning("[Agent-2] ignored message for {To}", to);
+                return;
+            }
 
-   _logger.LogInformation("[Agent-2] received: '{Text}' from {From}", text, from);
+            _logger.LogInformation("[Agent-2] received: '{Text}' from {From}", text, from);
 
-  string result;
-        try
-       {
-   // Use AgentRouter for intelligent routing
-      FunctionResult functionResult = await _router!.RouteAndExecuteAsync(text);
-           result = functionResult.ToString();
-   _logger.LogInformation("[Agent-2] Successfully processed request using router");
-   }
-     catch (Exception ex)
-     {
-_logger.LogError(ex, "[Agent-2] Error processing request with router");
-   result = $"[error] {ex.Message}";
-       }
+            string result;
+            try
+            {
+                // Use AgentRouter for intelligent routing
+                FunctionResult functionResult = await _router!.RouteAndExecuteAsync(text);
+                result = functionResult.ToString();
+                _logger.LogInformation("[Agent-2] Successfully processed request using router");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[Agent-2] Error processing request with router");
+                result = $"[error] {ex.Message}";
+            }
 
-  _logger.LogInformation("[Agent-2] → responding with '{Result}'", result);
+            _logger.LogInformation("[Agent-2] → responding with '{Result}'", result);
 
-       AgentMessage response = A2AHelper.BuildTaskRequest(result, "Agent2", from ?? string.Empty);
-  string responseJson = JsonSerializer.Serialize(response, A2AJsonUtilities.DefaultOptions);
-await _transport.SendMessageAsync(responseJson);
-     }, cancellationToken);
+            AgentMessage response = A2AHelper.BuildTaskRequest(result, "Agent2", from ?? string.Empty);
+            string responseJson = JsonSerializer.Serialize(response, A2AJsonUtilities.DefaultOptions);
+            await _transport.SendMessageAsync(responseJson);
+        }, cancellationToken);
 
-     Console.ReadLine();
+        Console.ReadLine();
         await _transport.StopProcessingAsync();
     }
 }
