@@ -32,6 +32,7 @@ builder.Services.AddSingleton<TransportManager>();
 WebApplication app = builder.Build();
 app.UseSwagger();
 app.UseSwaggerUI();
+
 app.MapPost("/api/client/post", async (
     HttpContext context,
     IHttpClientFactory httpClientFactory,
@@ -40,14 +41,6 @@ app.MapPost("/api/client/post", async (
 {
     if(string.IsNullOrWhiteSpace(capability))
         return Results.BadRequest("Capability must be provided in the request body.");
-
-    // Extract the keyword before the first colon (or the whole string if no colon)
-    string keyword = capability.Split(new[] { ':' }, 2)[0].Trim();
-
-    if(string.IsNullOrWhiteSpace(keyword))
-    {
-        return Results.BadRequest("Unable to extract keyword from capability string.");
-    }
 
     HttpClient client = httpClientFactory.CreateClient();
 
@@ -58,7 +51,7 @@ app.MapPost("/api/client/post", async (
         string json = await client.GetStringAsync(DiscoveryUrl);
         var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
         agentsDict = JsonSerializer.Deserialize<Dictionary<string, AgentCapability>>(json, options)
-                     ?? new Dictionary<string, AgentCapability>();
+       ?? new Dictionary<string, AgentCapability>();
     }
     catch(Exception ex)
     {
@@ -69,15 +62,26 @@ app.MapPost("/api/client/post", async (
         });
     }
 
-    // Step 2: Find agents matching the keyword
+    if(!agentsDict.Any())
+        return Results.NotFound(new { Message = "No agents registered in discovery service." });
+
+    // Step 2: Use intelligent matching - send to all agents and let them decide
+    // Or use keyword-based routing for now with improved logic
+    string lowerCapability = capability.ToLowerInvariant();
+    string targetSkill = DetermineTargetSkill(lowerCapability);
+
+    // Step 3: Find agents matching the determined skill
     var matchedAgents = agentsDict.Values
-        .Where(a => string.Equals(a.Skill?.Trim(), keyword, StringComparison.OrdinalIgnoreCase))
+    .Where(a => string.Equals(a.Skill?.Trim(), targetSkill, StringComparison.OrdinalIgnoreCase))
         .ToList();
 
+    // If no exact match, try to match any agent (they will use router internally)
     if(!matchedAgents.Any())
-        return Results.NotFound(new { Message = $"No agents found with skill matching '{keyword}'." });
+    {
+        matchedAgents = agentsDict.Values.ToList();
+    }
 
-    // Step 3: Resolve each matched agent endpoint dynamically and get responses
+    // Step 4: Resolve and invoke agents
     var agentResponses = new List<object>();
     TransportManager transportManager = serviceProvider.GetRequiredService<TransportManager>();
 
@@ -91,25 +95,18 @@ app.MapPost("/api/client/post", async (
             {
                 // Get or create transport for this endpoint
                 IMessagingTransport transport = await transportManager.GetOrCreateTransportAsync(
-                    endpoint.Address,
-                    serviceProvider.GetRequiredService<ILogger<NamedPipeTransport>>());
+                         endpoint.Address,
+                                serviceProvider.GetRequiredService<ILogger<NamedPipeTransport>>());
 
                 Agent1 agent1 = serviceProvider.GetRequiredService<Agent1>();
-                AgentMessage request;
-                string inputText = capability.Split(new[] { ':' }, 2).Length > 1 ? capability.Split(new[] { ':' }, 2)[1].Trim()
-                                              : "";
 
-                if(agent.Skill == "reverse")
-                {
-                    request = A2AHelper.BuildTaskRequest($"reverse: {inputText}", "Agent1", "Agent2");
-                }
-                else
-                {
-                    request = A2AHelper.BuildTaskRequest($"uppercase: {inputText}", "Agent1", "Agent3");
-                }
+                // Build request with natural language - let the agent router handle it
+                string targetAgentName = agent.AgentId ?? GetAgentNameFromSkill(agent.Skill);
+                AgentMessage request = A2AHelper.BuildTaskRequest(capability, "Agent1", targetAgentName);
 
-                // Create a timeout cancellation token
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                // Create a timeout cancellation token (increase for news requests)
+                int timeoutSeconds = agent.Skill == "news" || lowerCapability.Contains("news") ? 60 : 30;
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
                 string? response = await agent1.SendRequestAsync(transport, request, cts.Token);
 
                 agentResponses.Add(new
@@ -119,6 +116,12 @@ app.MapPost("/api/client/post", async (
                     Response = response ?? "No response received",
                     Success = response != null
                 });
+
+                // If we got a successful response, break (don't query all agents)
+                if(response != null && !response.Contains("[error]"))
+                {
+                    break;
+                }
             }
         }
         catch(OperationCanceledException)
@@ -126,7 +129,7 @@ app.MapPost("/api/client/post", async (
             agentResponses.Add(new
             {
                 Agent = agent.Skill,
-                Error = "Request timed out after 30 seconds"
+                Error = "Request timed out"
             });
         }
         catch(Exception ex)
@@ -141,14 +144,15 @@ app.MapPost("/api/client/post", async (
 
     return Results.Ok(new
     {
-        Keyword = keyword,
+        Request = capability,
+        DeterminedSkill = targetSkill,
         MatchedCount = matchedAgents.Count,
         Responses = agentResponses
     });
 })
 .WithName("PostClientCapability")
-.WithSummary("Posts a capability to matching agents")
-.WithDescription("Queries the discovery service, finds matching agents by capability, resolves their endpoints, and invokes them to get responses.")
+.WithSummary("Posts a natural language request to matching agents")
+.WithDescription("Intelligently routes requests to agents using Semantic Kernel. Agents use internal routers to determine the appropriate action.")
 .Produces(200)
 .Produces(400)
 .Produces(404)
@@ -157,3 +161,29 @@ app.MapPost("/api/client/post", async (
 ServiceProvider provider = services.BuildServiceProvider();
 
 await app.RunAsync();
+
+// Helper function to determine target skill from natural language
+static string DetermineTargetSkill(string request)
+{
+    if(request.Contains("reverse"))
+        return "reverse";
+    if(request.Contains("upper") || request.Contains("capitalize"))
+        return "uppercase";
+    if(request.Contains("news") || request.Contains("search") || request.Contains("find"))
+        return "news";
+
+    // Default to first available agent
+    return "reverse";
+}
+
+// Helper to get agent name from skill
+static string GetAgentNameFromSkill(string skill)
+{
+    return skill?.ToLowerInvariant() switch
+    {
+        "reverse" => "Agent2",
+        "uppercase" => "Agent3",
+        "news" => "Agent4",
+        _ => "Agent2"
+    };
+}
